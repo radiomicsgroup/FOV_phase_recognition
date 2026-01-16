@@ -27,40 +27,44 @@ def fov_recon(image_path: str, im_type: Literal["MRI", "CT"], output_path: str) 
     Returns:
     - str: Recognized FOV value.
     """
-    image_obj, image = read_nifti(image_path, to_ras=True)
-    image, non_blank_slices = remove_blank_slices(image)
-    if image.shape[2] < 10:
-        return "scout"
-    
-    task = "total" if im_type == "CT" else "total_mr"
-    organs = ["heart", "sternum", "sacrum", "liver", "spleen", "kidney"]
-    if im_type == "MRI":
-        organs.remove("sternum")  # sternum not available in total_mr model
-    
-    # totalsegmentator(image_obj, output_path, task=task)
+    try:
+        image_obj, image = read_nifti(image_path, to_ras=True)
+        image, non_blank_slices = remove_blank_slices(image)
+        if image.shape[2] < 10:
+            return "scout"
+        
+        task = "total" if im_type == "CT" else "total_mr"
+        organs = ["heart", "sternum", "sacrum", "liver", "spleen", "kidney"]
+        if im_type == "MRI":
+            organs.remove("sternum")  # sternum not available in total_mr model
+        
+        totalsegmentator(image_obj, output_path, task=task)
 
-    masks = {o: read_mask(output_path,o, non_blank_slices) for o in organs}
+        masks = {o: read_mask(output_path,o, non_blank_slices) for o in organs}
 
-    heart_ok = masks["heart"].sum() > 0
-    if im_type == "MRI":
-        sternum_ok = True
-        edges_clear = all(masks["heart"][:,:,i].sum() == 0 for i in (0, -1))
-    else:
-        sternum_ok = masks["sternum"].sum() > 0
-        edges_clear = all(masks[k][:,:,i].sum() == 0 for k in ("sternum", "heart") for i in (0, -1))
+        heart_ok = masks["heart"].sum() > 0
+        if im_type == "MRI":
+            sternum_ok = True
+            edges_clear = all(masks["heart"][:,:,i].sum() == 0 for i in (0, -1))
+        else:
+            sternum_ok = masks["sternum"].sum() > 0
+            edges_clear = all(masks[k][:,:,i].sum() == 0 for k in ("sternum", "heart") for i in (0, -1))
 
-    if heart_ok and sternum_ok and edges_clear:
-        fov = "whole_body" if masks["sacrum"].sum() > 0 else "thorax"
-    elif (
-        masks["liver"].sum() > 0
-        and (masks["spleen"].sum() > 0
-        or masks["kidney"].sum() > 0)
-        ):
-        fov = "abdomen"
-    else:
-        fov = "unknown"
-    
-    # if 'tmp_' in output_path:
-    #     os.system('rm -rf '+output_path)
+        if heart_ok and sternum_ok and edges_clear:
+            fov = "whole_body" if masks["sacrum"].sum() > 0 else "thorax"
+        elif (
+            masks["liver"].sum() > 0
+            and (masks["spleen"].sum() > 0
+            or masks["kidney"].sum() > 0)
+            ):
+            fov = "abdomen"
+        else:
+            fov = "unknown"
+        
+        if 'tmp_' in output_path:
+            os.system('rm -rf '+output_path)
 
-    return fov
+        return fov
+    except Exception as e:
+        print(f"Error in fov_recon: {e}")
+        return "unknown"
