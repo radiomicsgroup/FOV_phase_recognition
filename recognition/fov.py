@@ -4,6 +4,7 @@ from typing import Literal
 from os.path import join
 from nibabel.nifti1 import Nifti1Image
 from totalsegmentator.python_api import totalsegmentator
+from totalsegmentator.map_to_binary import class_map
 
 from recognition.utils import arr_union, read_nifti, remove_blank_slices
 
@@ -38,20 +39,37 @@ def fov_recon(image_obj: Nifti1Image, image: np.ndarray, im_type: Literal["MRI",
     if im_type == "MRI":
         organs.remove("sternum")  # sternum not available in total_mr model
     
-    totalsegmentator(image_obj, output_path, task=task)
-
-    masks = {o: read_mask(output_path,o, non_blank_slices) for o in organs}
+    no_saving = output_path is None
+    segmentation = totalsegmentator(image_obj, output_path, ml=True, skip_saving=no_saving, task=task)
+    mask_data = np.array(segmentation.get_fdata())
+    
+    task_map = class_map.get(task, {})
+    task_map_rev = {v: k for k, v in task_map.items()}
+    masks = {}
+    for o in organs:
+        mask = mask_data.copy()
+        if o == "kidney":
+            mask[(mask_data != task_map_rev["kidney_left"]) *
+                 (mask_data != task_map_rev["kidney_right"]) ] = 0
+        else:
+            mask[mask_data != task_map_rev[o]] = 0
+        masks[o] = mask[:,:,non_blank_slices]
 
     heart_ok = masks["heart"].sum() > 0
     if im_type == "MRI":
         sternum_ok = True
-        edges_clear = all(masks["heart"][:,:,i].sum() == 0 for i in (0, -1))
+        edges_clear = all(masks["heart"][:,:,i].sum() == 0 for i in (0, 1, -1, -2)) # Two clear slices because sometimes last one is not segmented
     else:
         sternum_ok = masks["sternum"].sum() > 0
-        edges_clear = all(masks[k][:,:,i].sum() == 0 for k in ("sternum", "heart") for i in (0, -1))
+        edges_clear = all(masks[k][:,:,i].sum() == 0 for k in ("sternum", "heart") for i in (0, 1, -1, -2))
 
     if heart_ok and sternum_ok and edges_clear:
-        fov = "whole_body" if masks["sacrum"].sum() > 0 else "thorax"
+        if masks["sacrum"].sum() > 0:
+            fov = "whole_body"
+        elif masks["liver"].sum() > 0 and masks["liver"][:,:,0].sum() == 0:
+             fov = "thorax_abdomen"
+        else:
+            fov = "torax"
     elif (
         masks["liver"].sum() > 0
         and (masks["spleen"].sum() > 0
@@ -60,8 +78,5 @@ def fov_recon(image_obj: Nifti1Image, image: np.ndarray, im_type: Literal["MRI",
         fov = "abdomen"
     else:
         fov = "unknown"
-    
-    if 'tmp_' in output_path:
-        os.system('rm -rf '+output_path)
     
     return fov

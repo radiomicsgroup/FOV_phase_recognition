@@ -13,7 +13,7 @@ from recognition.utils import read_nifti, check_setting
 
 tqdm.pandas()
 
-def process_image(image_path: str, im_type: str, output_path: str, writer: _csv.Writer, nofov_nophase: tuple[bool, bool] = (False, False)):
+def process_image(image_path: str, im_type: str, output_path: str | None, writer: _csv.Writer, nofov_nophase: tuple[bool, bool] = (False, False)):
     """Process a single image to determine its FOV and Phase."""
     assert len(nofov_nophase) == 2, "nofov_nophase must be a tuple of two boolean values."
     
@@ -68,8 +68,6 @@ if __name__ == "__main__":
         df_to_process = df_input.copy()
         print(f"Starting fresh: {len(df_to_process)} paths to process.")
 
-    if args.output is None:
-        args.output = './tmp_masks/' # totalsegmentator will create this folder
 
     with open(output_csv, 'a', newline='') as csvfile:
         writer = csv.writer(csvfile)
@@ -82,7 +80,8 @@ if __name__ == "__main__":
             writer.writerow(header)
         df_to_process.progress_apply(lambda row: (process_image(row["im_path"],
                                                             args.im_type,
-                                                            join(args.output, str(row.name)),
+                                                            join(args.output, str(row.name))
+                                                              if args.output is not None else None,
                                                             writer,
                                                             (args.no_fov, args.no_phase)
                                                             ), csvfile.flush()),
