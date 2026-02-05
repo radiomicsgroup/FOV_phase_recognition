@@ -38,6 +38,7 @@ def fov_recon(image_obj: Nifti1Image, image: np.ndarray, im_type: Literal["MRI",
     organs = ["heart", "sternum", "sacrum", "liver", "spleen", "kidney"]
     if im_type == "MRI":
         organs.remove("sternum")  # sternum not available in total_mr model
+        organs.append("prostate")
     
     no_saving = output_path is None
     segmentation = totalsegmentator(image_obj, output_path, ml=True, skip_saving=no_saving, task=task)
@@ -65,17 +66,26 @@ def fov_recon(image_obj: Nifti1Image, image: np.ndarray, im_type: Literal["MRI",
 
     if heart_ok and sternum_ok and edges_clear:
         if masks["sacrum"].sum() > 0:
-            fov = "whole_body"
+            if im_type == "MRI" and masks["liver"].sum() == 0:
+                fov = "spine"
+            else:
+                fov = "whole_body"
         elif masks["liver"].sum() > 0 and masks["liver"][:,:,0].sum() == 0:
              fov = "thorax_abdomen"
         else:
-            fov = "torax"
+            fov = "thorax"
     elif (
         masks["liver"].sum() > 0
         and (masks["spleen"].sum() > 0
         or masks["kidney"].sum() > 0)
         ):
         fov = "abdomen"
+    elif (
+        im_type == "MRI"
+        and masks["prostate"].sum() > 0
+        and all(masks["prostate"][:,:,i].sum() == 0 for i in (0, 1, -1, -2))
+        ):
+        fov = "pelvis"
     else:
         fov = "unknown"
     
