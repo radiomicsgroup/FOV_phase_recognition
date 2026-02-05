@@ -1,6 +1,11 @@
 import numpy as np
 import nibabel as nib
 
+def save_result(output_path: str, res: str):
+    """Save the FOV/Phase results to a text file."""
+    with open(output_path, 'w') as f:
+        f.write(f"{res}")
+
 def check_setting(columns: list[str], no_fov: bool, no_phase: bool):
     """Check if the settings for FOV and Phase recognition are consistent with existing columns."""
     if no_fov and 'fov' in columns:

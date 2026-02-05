@@ -9,7 +9,7 @@ from os.path import join
 
 from recognition.fov import fov_recon
 from recognition.phase import phase_recon
-from recognition.utils import read_nifti, check_setting
+from recognition.utils import read_nifti, check_setting, save_result
 
 tqdm.pandas()
 
@@ -18,25 +18,31 @@ def process_image(image_path: str, im_type: str, output_path: str | None, writer
     assert len(nofov_nophase) == 2, "nofov_nophase must be a tuple of two boolean values."
     
     out = [image_path]
-    img_obj, img_data = read_nifti(image_path, to_ras=True) # Load image once
+    if not os.path.exists(image_path):
+        print(f"Image path does not exist: {image_path}")
+        out.extend(["img_not_found"] * (2 - sum(nofov_nophase)))
+    else:
+        img_obj, img_data = read_nifti(image_path, to_ras=True) # Load image once
 
-    # FOV Recognition
-    if not nofov_nophase[0]:
-        try:
-            fov = fov_recon(img_obj, img_data, im_type, output_path)
-        except Exception as e:
-            print(f"Error processing FOV for image {image_path}: {e}")
-            fov = "error"
-        out.append(fov)
-    
-    # Phase Recognition
-    if not nofov_nophase[1]:
-        try:
-            phase = phase_recon(img_obj, im_type, output_path)
-        except Exception as e:
-            print(f"Error processing Phase for image {image_path}: {e}")
-            phase = "error"
-        out.append(phase)
+        # FOV Recognition
+        if not nofov_nophase[0]:
+            try:
+                fov = fov_recon(img_obj, img_data, im_type, output_path)
+            except Exception as e:
+                print(f"Error processing FOV for image {image_path}: {e}")
+                fov = "error"
+            out.append(fov)
+            save_result(image_path.replace('.nii.gz', '').replace('.nii','')+'_fov.txt', fov)
+        
+        # Phase Recognition
+        if not nofov_nophase[1]:
+            try:
+                phase = phase_recon(img_obj, im_type, output_path)
+            except Exception as e:
+                print(f"Error processing Phase for image {image_path}: {e}")
+                phase = "error"
+            out.append(phase)
+            save_result(image_path.replace('.nii.gz', '').replace('.nii','')+'_phase.txt', phase)
     
     writer.writerow(out)
 
